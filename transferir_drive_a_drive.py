@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script para transferir actas de una cuenta de Google Drive a otra
-Permite mover las 19k actas de tu cuenta personal a una cuenta anónima
+Script to transfer ballots from one Google Drive account to another
+Allows moving the 19k ballots from your personal account to an anonymous account
 
-IMPORTANTE: Este script requiere dos archivos de credenciales:
-- credentials_original.json: Credenciales de tu cuenta personal (origen)
-- credentials_anonima.json: Credenciales de la cuenta anónima (destino)
+IMPORTANT: This script requires two credential files:
+- credentials_original.json: Credentials for your personal account (source)
+- credentials_anonima.json: Credentials for the anonymous account (destination)
 """
 
 import json
@@ -20,30 +20,30 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 import io
 
-# Scopes necesarios
+# Required scopes
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
-# IDs de carpetas padre (opcional)
-PARENT_FOLDER_ID_DESTINO = None  # Cambiar si quieres subir a carpeta específica
+# Parent folder IDs (optional)
+PARENT_FOLDER_ID_DESTINO = None  # Change if you want to upload to a specific folder
 
 def autenticar_drive(credentials_file, token_file):
     """
-    Autentica con Google Drive usando OAuth 2.0
+    Authenticate with Google Drive using OAuth 2.0
 
     Args:
-        credentials_file: Archivo de credenciales (credentials.json)
-        token_file: Archivo de token (se crea automáticamente)
+        credentials_file: Credentials file (credentials.json)
+        token_file: Token file (created automatically)
 
     Returns:
-        Servicio de Google Drive autenticado
+        Authenticated Google Drive service
     """
     creds = None
 
-    # Verificar si ya existe token
+    # Check if token already exists
     if os.path.exists(token_file):
         creds = Credentials.from_authorized_user_file(token_file, SCOPES)
 
-    # Si no hay credenciales válidas, autenticar
+    # If no valid credentials, authenticate
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
@@ -58,7 +58,7 @@ def autenticar_drive(credentials_file, token_file):
                 credentials_file, SCOPES)
             creds = flow.run_local_server(port=0)
 
-        # Guardar credenciales para próxima ejecución
+        # Save credentials for next run
         with open(token_file, 'w') as token:
             token.write(creds.to_json())
 
@@ -67,15 +67,15 @@ def autenticar_drive(credentials_file, token_file):
 
 def obtener_carpeta_por_nombre(service, nombre_carpeta, parent_id=None):
     """
-    Busca una carpeta por nombre en Google Drive
+    Search for a folder by name in Google Drive
 
     Args:
-        service: Servicio de Google Drive
-        nombre_carpeta: Nombre de la carpeta a buscar
-        parent_id: ID de la carpeta padre (opcional)
+        service: Google Drive service
+        nombre_carpeta: Name of the folder to search for
+        parent_id: Parent folder ID (optional)
 
     Returns:
-        ID de la carpeta si existe, None si no existe
+        Folder ID if found, None if not found
     """
     query = f"name='{nombre_carpeta}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
 
@@ -98,15 +98,15 @@ def obtener_carpeta_por_nombre(service, nombre_carpeta, parent_id=None):
 
 def crear_carpeta(service, nombre_carpeta, parent_id=None):
     """
-    Crea una carpeta en Google Drive
+    Create a folder in Google Drive
 
     Args:
-        service: Servicio de Google Drive
-        nombre_carpeta: Nombre de la carpeta
-        parent_id: ID de la carpeta padre (opcional)
+        service: Google Drive service
+        nombre_carpeta: Folder name
+        parent_id: Parent folder ID (optional)
 
     Returns:
-        ID de la carpeta creada
+        ID of the created folder
     """
     file_metadata = {
         'name': nombre_carpeta,
@@ -126,24 +126,24 @@ def crear_carpeta(service, nombre_carpeta, parent_id=None):
 
 def descargar_archivo_desde_url_drive(url_drive, archivo_destino):
     """
-    Descarga un archivo desde Google Drive usando URL pública
+    Download a file from Google Drive using a public URL
 
     Args:
-        url_drive: URL del archivo en Google Drive
-        archivo_destino: Ruta donde guardar el archivo
+        url_drive: File URL in Google Drive
+        archivo_destino: Path where to save the file
 
     Returns:
-        True si se descargó exitosamente, False si falló
+        True if downloaded successfully, False if failed
     """
     try:
-        # Extraer file_id de la URL
-        # Formato: https://drive.google.com/file/d/FILE_ID/view?usp=...
+        # Extract file_id from the URL
+        # Format: https://drive.google.com/file/d/FILE_ID/view?usp=...
         file_id = url_drive.split('/d/')[1].split('/')[0]
 
-        # URL de descarga directa
+        # Direct download URL
         download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
 
-        # Descargar archivo
+        # Download file
         response = requests.get(download_url, stream=True)
 
         if response.status_code == 200:
@@ -162,16 +162,16 @@ def descargar_archivo_desde_url_drive(url_drive, archivo_destino):
 
 def subir_archivo_a_drive(service, archivo_local, nombre_archivo, folder_id):
     """
-    Sube un archivo a Google Drive
+    Upload a file to Google Drive
 
     Args:
-        service: Servicio de Google Drive
-        archivo_local: Ruta del archivo local
-        nombre_archivo: Nombre con el que se guardará en Drive
-        folder_id: ID de la carpeta destino
+        service: Google Drive service
+        archivo_local: Local file path
+        nombre_archivo: Name to save the file as in Drive
+        folder_id: Destination folder ID
 
     Returns:
-        ID del archivo subido
+        ID of the uploaded file
     """
     file_metadata = {
         'name': nombre_archivo,
@@ -195,16 +195,16 @@ def subir_archivo_a_drive(service, archivo_local, nombre_archivo, folder_id):
 
 def hacer_archivo_publico(service, file_id):
     """
-    Hace un archivo público (cualquiera con el enlace puede ver)
+    Make a file public (anyone with the link can view)
 
     Args:
-        service: Servicio de Google Drive
-        file_id: ID del archivo
+        service: Google Drive service
+        file_id: File ID
 
     Returns:
-        URL pública del archivo
+        Public URL of the file
     """
-    # Cambiar permisos a público
+    # Change permissions to public
     service.permissions().create(
         fileId=file_id,
         body={
@@ -213,16 +213,16 @@ def hacer_archivo_publico(service, file_id):
         }
     ).execute()
 
-    # Obtener URL
+    # Get URL
     file = service.files().get(
         fileId=file_id,
         fields='webViewLink'
     ).execute()
 
-    # Cambiar formato de URL
+    # Change URL format
     url = file.get('webViewLink')
-    # De: https://drive.google.com/file/d/FILE_ID/view
-    # A: https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+    # From: https://drive.google.com/file/d/FILE_ID/view
+    # To:   https://drive.google.com/file/d/FILE_ID/view?usp=sharing
     if '?usp=' not in url:
         url = url.replace('/view', '/view?usp=sharing')
     else:
@@ -233,20 +233,20 @@ def hacer_archivo_publico(service, file_id):
 
 def transferir_actas(json_origen, json_destino, credentials_origen, credentials_destino):
     """
-    Transfiere todas las actas de una cuenta de Drive a otra
+    Transfer all ballots from one Drive account to another
 
     Args:
-        json_origen: Archivo JSON con URLs de origen
-        json_destino: Archivo JSON de salida con URLs actualizadas
-        credentials_origen: credentials.json de cuenta origen
-        credentials_destino: credentials.json de cuenta destino
+        json_origen: JSON file with source URLs
+        json_destino: JSON output file with updated URLs
+        credentials_origen: credentials.json for source account
+        credentials_destino: credentials.json for destination account
     """
 
     print("=" * 80)
     print("TRANSFERENCIA DE ACTAS ENTRE CUENTAS DE GOOGLE DRIVE")
     print("=" * 80)
 
-    # Autenticar ambas cuentas
+    # Authenticate both accounts
     print("\n1. Autenticando cuenta ORIGEN...")
     service_origen = autenticar_drive(credentials_origen, "token_origen.json")
     print("   ✓ Autenticado en cuenta origen")
@@ -255,24 +255,24 @@ def transferir_actas(json_origen, json_destino, credentials_origen, credentials_
     service_destino = autenticar_drive(credentials_destino, "token_destino.json")
     print("   ✓ Autenticado en cuenta destino")
 
-    # Leer JSON
+    # Read JSON
     print(f"\n3. Leyendo archivo JSON: {json_origen}")
     with open(json_origen, 'r', encoding='utf-8') as f:
         datos = json.load(f)
 
     print(f"   Total de registros: {len(datos)}")
 
-    # Contar actas con url_drive
+    # Count ballots with url_drive
     actas_con_url = [r for r in datos if r.get('url_drive')]
     print(f"   Actas con url_drive: {len(actas_con_url)}")
 
-    # Crear carpetas por departamento
+    # Create folders by department
     print("\n4. Creando estructura de carpetas en cuenta destino...")
     carpetas_departamentos = {}
     departamentos_unicos = set(r['departamento'] for r in datos if r.get('url_drive'))
 
     for departamento in sorted(departamentos_unicos):
-        # Verificar si ya existe la carpeta
+        # Check if the folder already exists
         folder_id = obtener_carpeta_por_nombre(service_destino, departamento)
 
         if not folder_id:
@@ -283,7 +283,7 @@ def transferir_actas(json_origen, json_destino, credentials_origen, credentials_
 
         carpetas_departamentos[departamento] = folder_id
 
-    # Transferir archivos
+    # Transfer files
     print("\n5. Transfiriendo archivos...")
     print("   (Este proceso puede tardar varias horas para 19k actas)")
     print("-" * 80)
@@ -306,10 +306,10 @@ def transferir_actas(json_origen, json_destino, credentials_origen, credentials_
         print(f"\n[{i}/{total}] JRV {numero_jrv} - {departamento}")
 
         try:
-            # Descargar desde cuenta origen
+            # Download from source account
             print(f"  → Descargando...")
             if descargar_archivo_desde_url_drive(url_original, archivo_temp):
-                # Subir a cuenta destino
+                # Upload to destination account
                 print(f"  → Subiendo a cuenta destino...")
                 folder_id = carpetas_departamentos[departamento]
                 archivo_subido = subir_archivo_a_drive(
@@ -319,13 +319,13 @@ def transferir_actas(json_origen, json_destino, credentials_origen, credentials_
                     folder_id
                 )
 
-                # Hacer público
+                # Make public
                 url_nueva = hacer_archivo_publico(service_destino, archivo_subido['id'])
 
-                # Actualizar URL en el registro
+                # Update URL in the record
                 registro['url_drive'] = url_nueva
 
-                # Borrar archivo temporal
+                # Delete temp file
                 os.remove(archivo_temp)
 
                 exitosos += 1
@@ -349,27 +349,27 @@ def transferir_actas(json_origen, json_destino, credentials_origen, credentials_
             })
             print(f"  ❌ Error: {e}")
 
-        # Delay para evitar rate limiting
+        # Delay to avoid rate limiting
         time.sleep(0.5)
 
-        # Mostrar progreso cada 100 archivos
+        # Show progress every 100 files
         if i % 100 == 0:
             print("\n" + "=" * 80)
             print(f"PROGRESO: {i}/{total} ({i/total*100:.1f}%)")
             print(f"Exitosos: {exitosos} | Fallidos: {fallidos}")
             print("=" * 80)
 
-    # Guardar JSON actualizado
+    # Save updated JSON
     print(f"\n6. Guardando JSON actualizado: {json_destino}")
     with open(json_destino, 'w', encoding='utf-8') as f:
         json.dump(datos, f, ensure_ascii=False, indent=2)
 
-    # Guardar log de errores
+    # Save error log
     if errores:
         with open('errores_transferencia.json', 'w', encoding='utf-8') as f:
             json.dump(errores, f, ensure_ascii=False, indent=2)
 
-    # Resumen final
+    # Final summary
     print("\n" + "=" * 80)
     print("RESUMEN FINAL")
     print("=" * 80)
@@ -385,24 +385,24 @@ def transferir_actas(json_origen, json_destino, credentials_origen, credentials_
 
 
 if __name__ == "__main__":
-    # CONFIGURACIÓN
+    # CONFIGURATION
     # ============================================
 
-    # Archivos de entrada/salida
-    json_origen = "resultados_validados_gemini.json"  # JSON con URLs originales
-    json_destino = "resultados_validados_gemini_ANONIMO.json"  # JSON con URLs nuevas
+    # Input/output files
+    json_origen = "resultados_validados_gemini.json"   # JSON with original URLs
+    json_destino = "resultados_validados_gemini_ANONIMO.json"  # JSON with new URLs
 
-    # Archivos de credenciales
-    credentials_origen = "credentials_original.json"  # Tu cuenta personal
-    credentials_destino = "credentials_anonima.json"  # Cuenta anónima nueva
+    # Credential files
+    credentials_origen = "credentials_original.json"  # Your personal account
+    credentials_destino = "credentials_anonima.json"  # New anonymous account
 
     # ============================================
 
-    # INSTRUCCIONES:
-    # 1. Descargar credentials.json de tu cuenta PERSONAL y renombrarlo a credentials_original.json
-    # 2. Crear cuenta Google ANÓNIMA (vía Tor, WiFi público)
-    # 3. Descargar credentials.json de cuenta anónima y renombrarlo a credentials_anonima.json
-    # 4. Ejecutar este script
+    # INSTRUCTIONS:
+    # 1. Download credentials.json from your PERSONAL account and rename it to credentials_original.json
+    # 2. Create an ANONYMOUS Google account (via Tor, public WiFi)
+    # 3. Download credentials.json from the anonymous account and rename it to credentials_anonima.json
+    # 4. Run this script
 
     print("""
     ⚠️ IMPORTANTE: Antes de ejecutar, asegúrate de tener:

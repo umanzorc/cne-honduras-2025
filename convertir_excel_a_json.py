@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script para convertir resultados_validados_gemini.xlsx a JSON
-Convierte el Excel a formato JSON con la estructura especificada
+Script to convert resultados_validados_gemini.xlsx to JSON
+Converts the Excel file to JSON format with the specified structure
 """
 
 import pandas as pd
@@ -11,11 +11,11 @@ import numpy as np
 
 def convertir_excel_a_json(archivo_excel, archivo_json_salida):
     """
-    Convierte el archivo Excel a JSON con la estructura requerida
+    Convert the Excel file to JSON with the required structure
 
     Args:
-        archivo_excel: Ruta al archivo Excel
-        archivo_json_salida: Ruta donde guardar el JSON
+        archivo_excel: Path to the Excel file
+        archivo_json_salida: Path where to save the JSON
     """
 
     print(f"Leyendo archivo Excel: {archivo_excel}")
@@ -24,14 +24,14 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
     print(f"Total de registros encontrados: {len(df)}")
     print(f"Total de columnas: {len(df.columns)}")
 
-    # Reemplazar NaN con None para que se convierta a null en JSON
+    # Replace NaN with None so it becomes null in JSON
     df = df.replace({np.nan: None})
 
-    # Convertir DataFrame a lista de diccionarios
+    # Convert DataFrame to list of dictionaries
     resultados = []
 
     for index, row in df.iterrows():
-        # Crear objeto JSON con la estructura especificada
+        # Create JSON object with the specified structure
         registro = {
             "id_departamento": str(row.get("id_departamento", "")).zfill(2) if row.get("id_departamento") is not None else None,
             "departamento": row.get("departamento"),
@@ -44,7 +44,7 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
             "numero_jrv": int(row.get("numero_jrv")) if pd.notna(row.get("numero_jrv")) else None,
             "fecha_corte": str(row.get("fecha_corte")) if row.get("fecha_corte") is not None else None,
 
-            # Votos digitados en el sistema del CNE
+            # Votes entered in the CNE system
             "votos_dc": int(row.get("votos_dc")) if pd.notna(row.get("votos_dc")) else 0,
             "votos_libre": int(row.get("votos_libre")) if pd.notna(row.get("votos_libre")) else 0,
             "votos_pinu": int(row.get("votos_pinu")) if pd.notna(row.get("votos_pinu")) else 0,
@@ -53,7 +53,7 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
             "votos_nulos": int(row.get("votos_nulos")) if pd.notna(row.get("votos_nulos")) else 0,
             "votos_blanco": int(row.get("votos_blanco")) if pd.notna(row.get("votos_blanco")) else 0,
 
-            # Estadísticas de actas
+            # Ballot statistics
             "cantidad_total_actas": int(row.get("cantidad_total_actas")) if pd.notna(row.get("cantidad_total_actas")) else 0,
             "verificado": int(row.get("verificado")) if pd.notna(row.get("verificado")) else 0,
             "cantidad_inconsistencias": int(row.get("cantidad_inconsistencias")) if pd.notna(row.get("cantidad_inconsistencias")) else 0,
@@ -64,10 +64,10 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
             "error_suma": int(row.get("error_suma")) if pd.notna(row.get("error_suma")) else 0,
             "etiquetas": str(row.get("etiquetas", "")) if row.get("etiquetas") else "",
 
-            # URL del PDF
+            # PDF URL
             "url_drive": str(row.get("url_drive")) if row.get("url_drive") is not None else None,
 
-            # Datos extraídos del PDF por IA
+            # Data extracted from PDF by AI
             "pdf_votos_dc": int(row.get("pdf_votos_dc")) if pd.notna(row.get("pdf_votos_dc")) else None,
             "pdf_votos_libre": int(row.get("pdf_votos_libre")) if pd.notna(row.get("pdf_votos_libre")) else None,
             "pdf_votos_pinu": int(row.get("pdf_votos_pinu")) if pd.notna(row.get("pdf_votos_pinu")) else None,
@@ -84,11 +84,11 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
             "pdf_numero_acta_qr": str(row.get("pdf_numero_acta_qr")) if row.get("pdf_numero_acta_qr") is not None else None,
             "pdf_numero_acta_barra": str(row.get("pdf_numero_acta_barra")) if row.get("pdf_numero_acta_barra") is not None else None,
 
-            # Campos calculados
+            # Calculated fields
             "SumatoriaManualPorPartido": int(row.get("SumatoriaManualPorPartido")) if pd.notna(row.get("SumatoriaManualPorPartido")) else None,
             "codigo_jrv": int(row.get("codigo_jrv")) if pd.notna(row.get("codigo_jrv")) else None,
 
-            # Flags de inconsistencias
+            # Inconsistency flags
             "InconsistenciaDatosDigitados": int(row.get("InconsistenciaDatosDigitados")) if pd.notna(row.get("InconsistenciaDatosDigitados")) else 0,
             "InconsistenciaGrandTotalPorVotantes": int(row.get("InconsistenciaGrandTotalPorVotantes")) if pd.notna(row.get("InconsistenciaGrandTotalPorVotantes")) else 0,
             "InconsistenciaJrv": int(row.get("InconsistenciaJrv")) if pd.notna(row.get("InconsistenciaJrv")) else 0,
@@ -98,11 +98,11 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
 
         resultados.append(registro)
 
-        # Mostrar progreso cada 1000 registros
+        # Show progress every 1000 records
         if (index + 1) % 1000 == 0:
             print(f"Procesados {index + 1} registros...")
 
-    # Guardar JSON
+    # Save JSON
     print(f"\nGuardando JSON en: {archivo_json_salida}")
     with open(archivo_json_salida, 'w', encoding='utf-8') as f:
         json.dump(resultados, f, ensure_ascii=False, indent=2)
@@ -111,7 +111,7 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
     print(f"  Total de registros: {len(resultados)}")
     print(f"  Archivo generado: {archivo_json_salida}")
 
-    # Estadísticas
+    # Statistics
     actas_con_url_drive = sum(1 for r in resultados if r.get("url_drive"))
     actas_con_inconsistencias = sum(1 for r in resultados if r.get("InconsistenciaDatosDigitados") == 1)
 
@@ -121,7 +121,7 @@ def convertir_excel_a_json(archivo_excel, archivo_json_salida):
 
 
 if __name__ == "__main__":
-    # Configuración
+    # Configuration
     archivo_excel = "resultados_validados_gemini.xlsx"
     archivo_json_salida = "resultados_validados_gemini.json"
 

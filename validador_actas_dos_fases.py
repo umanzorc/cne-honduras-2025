@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Validador de Actas en DOS FASES - Máxima Precisión y Costo Optimizado
-FASE 1: Claude Sonnet 4 valida TODAS las actas (~$60 para 20k actas)
-FASE 2: Claude Opus 4.5 RE-VALIDA solo las inconsistentes (~$3-5)
+Two-Phase Ballot Validator — Maximum Precision and Optimized Cost
+PHASE 1: Claude Sonnet 4 validates ALL ballots (~$60 for 20k ballots)
+PHASE 2: Claude Opus 4.5 RE-VALIDATES only inconsistent ones (~$3-5)
 """
 
 import json
@@ -14,16 +14,16 @@ from anthropic import Anthropic
 from typing import Dict, List
 import sys
 
-# Configuración
+# Configuration
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")  # export ANTHROPIC_API_KEY='sk-ant-...'
 DELAY_ENTRE_PETICIONES = 2
 
-# Modelos
-MODELO_FASE1 = "claude-sonnet-4-20250514"  # Rápido y económico
-MODELO_FASE2 = "claude-opus-4-5-20251101"  # Máxima precisión
+# Models
+MODELO_FASE1 = "claude-sonnet-4-20250514"  # Fast and economical
+MODELO_FASE2 = "claude-opus-4-5-20251101"  # Maximum precision
 
 def cargar_json(ruta_json: str) -> List[Dict]:
-    """Carga el JSON con los datos del CNE"""
+    """Load JSON with CNE data"""
     print(f"📂 Cargando datos desde: {ruta_json}")
     with open(ruta_json, 'r', encoding='utf-8') as f:
         datos = json.load(f)
@@ -36,7 +36,7 @@ def cargar_json(ruta_json: str) -> List[Dict]:
     return datos
 
 def descargar_pdf(url: str) -> bytes:
-    """Descarga el PDF desde la URL de S3"""
+    """Download PDF from the S3 URL"""
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
@@ -47,7 +47,7 @@ def descargar_pdf(url: str) -> bytes:
 
 def extraer_votos_con_claude(pdf_content: bytes, client: Anthropic, modelo: str, fase: str = "") -> Dict:
     """
-    Envía el PDF a Claude y extrae los votos de cada partido
+    Send the PDF to Claude and extract votes for each party
     """
     pdf_base64 = base64.standard_b64encode(pdf_content).decode('utf-8')
 
@@ -162,7 +162,7 @@ Responde ÚNICAMENTE con un JSON en este formato exacto (sin markdown, sin expli
 
         respuesta = message.content[0].text.strip()
 
-        # Limpiar markdown si viene
+        # Strip markdown if present
         if respuesta.startswith('```'):
             respuesta = respuesta.split('```')[1]
             if respuesta.startswith('json'):
@@ -177,13 +177,13 @@ Responde ÚNICAMENTE con un JSON en este formato exacto (sin markdown, sin expli
         return None
 
 def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") -> Dict:
-    """Procesa una acta individual"""
+    """Process an individual ballot"""
 
     resultado = acta.copy()
     numero_jrv = acta.get('numero_jrv', 'N/A')
     url_pdf = acta.get('url_acta_pdf', '')
 
-    # Inicializar campos
+    # Initialize fields
     resultado['pdf_votos_dc'] = None
     resultado['pdf_votos_libre'] = None
     resultado['pdf_votos_pinu'] = None
@@ -211,7 +211,7 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
         print("⚠️  Sin URL de PDF")
         return resultado
 
-    # Descargar PDF
+    # Download PDF
     print("📥 Descargando PDF...")
     pdf_content = descargar_pdf(url_pdf)
 
@@ -219,7 +219,7 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
         print("❌ Error descargando PDF")
         return resultado
 
-    # Extraer votos con Claude
+    # Extract votes with Claude
     print("🤖 Analizando PDF con Claude AI...")
     votos_extraidos = extraer_votos_con_claude(pdf_content, client, modelo, fase)
 
@@ -227,7 +227,7 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
         print("❌ Error al extraer votos con IA")
         return resultado
 
-    # Guardar datos extraídos
+    # Store extracted data
     resultado['pdf_votos_dc'] = votos_extraidos.get('votos_dc')
     resultado['pdf_votos_libre'] = votos_extraidos.get('votos_libre')
     resultado['pdf_votos_pinu'] = votos_extraidos.get('votos_pinu')
@@ -244,7 +244,7 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
     resultado['pdf_numero_acta_qr'] = votos_extraidos.get('numero_acta_qr')
     resultado['pdf_numero_acta_barra'] = votos_extraidos.get('numero_acta_barra')
 
-    # Calcular sumatoria
+    # Calculate sum
     votos_lista = [
         resultado['pdf_votos_dc'],
         resultado['pdf_votos_libre'],
@@ -258,7 +258,7 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
     if all(v is not None for v in votos_lista):
         resultado['SumatoriaManualPorPartido'] = sum(votos_lista)
 
-    # Validaciones
+    # Validations
     partidos_a_comparar = [
         ('votos_dc', 'pdf_votos_dc', 'DC'),
         ('votos_libre', 'pdf_votos_libre', 'LIBRE'),
@@ -283,7 +283,7 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
 
     resultado['InconsistenciaDatosDigitados'] = 1 if tiene_inconsistencia else 0
 
-    # Otras validaciones
+    # Additional validations
     sumatoria = resultado['SumatoriaManualPorPartido']
     gran_total = resultado['pdf_gran_total']
     total_votantes = resultado['pdf_total_votantes']
@@ -311,7 +311,7 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
     if qr is not None and barra is not None and qr != barra:
         resultado['NumeroActaInconsistente'] = 1
 
-    # Mostrar resultado
+    # Show result
     print("🔍 Validación completada:")
     if resultado['InconsistenciaDatosDigitados'] == 1:
         print("⚠️  DATOS DIGITADOS INCONSISTENTES:")
@@ -324,8 +324,8 @@ def procesar_acta(acta: Dict, client: Anthropic, modelo: str, fase: str = "") ->
 
 def validar_actas_dos_fases(ruta_json: str):
     """
-    FASE 1: Valida todas con Sonnet 4
-    FASE 2: Re-valida inconsistentes con Opus 4.5
+    PHASE 1: Validate all ballots with Sonnet 4
+    PHASE 2: Re-validate inconsistent ones with Opus 4.5
     """
 
     if not ANTHROPIC_API_KEY:
@@ -335,7 +335,7 @@ def validar_actas_dos_fases(ruta_json: str):
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
     actas = cargar_json(ruta_json)
 
-    # ==================== FASE 1: SONNET 4 ====================
+    # ==================== PHASE 1: SONNET 4 ====================
     print("=" * 80)
     print("🔵 FASE 1: Validación con Claude Sonnet 4 (TODAS las actas)")
     print("=" * 80)
@@ -357,13 +357,13 @@ def validar_actas_dos_fases(ruta_json: str):
         if idx < total:
             time.sleep(DELAY_ENTRE_PETICIONES)
 
-    # Guardar resultados de Fase 1
+    # Save Phase 1 results
     ruta_fase1 = "resultados_fase1_sonnet.json"
     print(f"\n💾 Guardando resultados Fase 1 en: {ruta_fase1}")
     with open(ruta_fase1, 'w', encoding='utf-8') as f:
         json.dump(resultados_fase1, f, ensure_ascii=False, indent=2)
 
-    # Identificar actas con inconsistencias
+    # Identify inconsistent ballots
     actas_inconsistentes = [
         r for r in resultados_fase1
         if r['InconsistenciaDatosDigitados'] == 1 or
@@ -382,7 +382,7 @@ def validar_actas_dos_fases(ruta_json: str):
         print("\n✅ ¡No hay inconsistencias! Todas las actas están correctas.")
         return
 
-    # ==================== FASE 2: OPUS 4.5 ====================
+    # ==================== PHASE 2: OPUS 4.5 ====================
     print("\n" + "=" * 80)
     print(f"💎 FASE 2: Re-validación con Claude Opus 4.5 ({len(actas_inconsistentes)} actas)")
     print("=" * 80)
@@ -397,33 +397,33 @@ def validar_actas_dos_fases(ruta_json: str):
         print(f"\n[FASE 2: {idx}/{len(actas_inconsistentes)}] JRV {numero_jrv} - {municipio}")
         print("-" * 80)
 
-        # Re-procesar con Opus 4.5
+        # Re-process with Opus 4.5
         resultado_opus = procesar_acta(acta_inconsistente, client, MODELO_FASE2, "FASE 2")
         resultados_fase2.append(resultado_opus)
 
         if idx < len(actas_inconsistentes):
             time.sleep(DELAY_ENTRE_PETICIONES)
 
-    # Combinar resultados: Opus sobrescribe Sonnet para inconsistentes
+    # Combine results: Opus overwrites Sonnet for inconsistent ballots
     resultados_finales = []
     jrvs_revalidados = {r['numero_jrv'] for r in resultados_fase2}
 
     for r in resultados_fase1:
         if r['numero_jrv'] in jrvs_revalidados:
-            # Buscar la versión de Opus
+            # Use the Opus version
             resultado_opus = next((ro for ro in resultados_fase2 if ro['numero_jrv'] == r['numero_jrv']), None)
             if resultado_opus:
                 resultados_finales.append(resultado_opus)
         else:
             resultados_finales.append(r)
 
-    # Guardar resultados finales
+    # Save final results
     ruta_final = "resultados_validados_dos_fases.json"
     print(f"\n💾 Guardando resultados finales en: {ruta_final}")
     with open(ruta_final, 'w', encoding='utf-8') as f:
         json.dump(resultados_finales, f, ensure_ascii=False, indent=2)
 
-    # Resumen final
+    # Final summary
     inconsistentes_final = sum(1 for r in resultados_finales if r['InconsistenciaDatosDigitados'] == 1)
 
     print("\n" + "=" * 80)

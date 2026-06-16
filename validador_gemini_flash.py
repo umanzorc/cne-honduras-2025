@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 #python validador_gemini_flash.py --depto 09
 """
-Validador de Actas con Google Gemini 2.0 Flash
-Alternativa económica a Claude para procesar 19,000 actas
+Ballot Validator with Google Gemini 2.0 Flash
+Cost-effective alternative to Claude for processing 19,000 ballots
 
-COSTO: GRATIS (tier gratuito) o ~$4 (tier pagado)
-TIEMPO: ~21 horas con tier gratuito (15 req/min)
-PRECISIÓN ESTIMADA: 90-95%
+COST: FREE (free tier) or ~$4 (paid tier)
+TIME: ~21 hours with free tier (15 req/min)
+ESTIMATED PRECISION: 90-95%
 """
 
 import json
@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 import argparse
 
-# Configurar encoding UTF-8 para Windows
+# Configure UTF-8 encoding for Windows
 if sys.platform == 'win32':
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -37,11 +37,11 @@ except ImportError:
     sys.exit(1)
 
 # ============================================================================
-# CONFIGURACIÓN
+# CONFIGURATION
 # ============================================================================
 
-# API Key de Google AI Studio (https://makersuite.google.com/app/apikey)
-GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')  # Configura: export GOOGLE_API_KEY='tu-key'
+# Google AI Studio API Key (https://makersuite.google.com/app/apikey)
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')  # Configure via: export GOOGLE_API_KEY='your-key'
 
 if not GOOGLE_API_KEY:
     print("❌ Error: No se encontró la API Key de Google")
@@ -51,32 +51,32 @@ if not GOOGLE_API_KEY:
     print("\n📝 Obtén tu API Key aquí: https://makersuite.google.com/app/apikey")
     sys.exit(1)
 
-# Archivos
+# Files
 JSON_INPUT = 'resultados_jrv_detallado_con_urls.json'
 JSON_OUTPUT = 'resultados_validados_gemini.json'
-JSON_PROCESADAS = 'jrvs_procesadas.json'  # Registro de JRVs ya procesadas
+JSON_PROCESADAS = 'jrvs_procesadas.json'  # Record of already-processed JRVs
 
-# Configuración de rate limiting
-USAR_TIER_GRATUITO = False  # True = 15 req/min (gratis), False = sin límite (pagado)
+# Rate limiting configuration
+USAR_TIER_GRATUITO = False  # True = 15 req/min (free), False = no limit (paid)
 REQUESTS_POR_MINUTO = 15 if USAR_TIER_GRATUITO else 500
-DELAY_ENTRE_REQUESTS = 60 / REQUESTS_POR_MINUTO  # segundos
+DELAY_ENTRE_REQUESTS = 60 / REQUESTS_POR_MINUTO  # seconds
 
-# Modelo
-MODELO = "gemini-2.5-flash"  # Modelo básico disponible en tier gratuito
+# Model
+MODELO = "gemini-2.5-flash"  # Basic model available on the free tier
 
-# Límite de actas a procesar (para pruebas)
-LIMITE_ACTAS = 4000 # None = todas, o número específico (ej: 100 para pruebas)
+# Limit of ballots to process (for testing)
+LIMITE_ACTAS = 4000  # None = all, or a specific number (e.g. 100 for testing)
 
-# Configuración de concurrencia
-# Gemini Flash soporta hasta 1000 req/min en tier pagado y 15 req/min en gratuito
-# Para tier gratuito: max 3-5 concurrentes para no saturar
-# Para tier pagado: 20-30 concurrentes es seguro
+# Concurrency configuration
+# Gemini Flash supports up to 1000 req/min on paid tier and 15 req/min on free tier
+# For free tier: max 3-5 concurrent to avoid saturation
+# For paid tier: 20-30 concurrent is safe
 CONCURRENCIA_MAXIMA = 3 if USAR_TIER_GRATUITO else 20
 
-# Carpeta de salida por departamento
+# Output folder by department
 OUTPUT_DIR = 'OutputDepartamentos'
 
-# Mapeo de departamentos
+# Department mapping
 DEPARTAMENTOS = {
     "01": "ATLANTIDA",
     "02": "COLON",
@@ -100,7 +100,7 @@ DEPARTAMENTOS = {
 }
 
 # ============================================================================
-# PROMPT DE EXTRACCIÓN
+# EXTRACTION PROMPT
 # ============================================================================
 
 PROMPT_EXTRACCION = """Analiza esta acta electoral de Honduras y extrae EXACTAMENTE los votos de cada partido.
@@ -183,14 +183,14 @@ IMPORTANTE:
 """
 
 # ============================================================================
-# FUNCIONES
+# FUNCTIONS
 # ============================================================================
 
 def configurar_gemini():
-    """Configura la API de Google Gemini"""
+    """Configure the Google Gemini API"""
     genai.configure(api_key=GOOGLE_API_KEY)
 
-    # Configuración de seguridad (permisiva para documentos electorales)
+    # Safety settings (permissive for electoral documents)
     safety_settings = [
         {
             "category": "HARM_CATEGORY_HARASSMENT",
@@ -218,7 +218,7 @@ def configurar_gemini():
     return model
 
 def cargar_jrvs_procesadas() -> set:
-    """Carga el conjunto de JRVs que ya fueron procesadas exitosamente"""
+    """Load the set of JRVs that were already successfully processed"""
     if not os.path.exists(JSON_PROCESADAS):
         return set()
 
@@ -231,7 +231,7 @@ def cargar_jrvs_procesadas() -> set:
         return set()
 
 def guardar_jrv_procesada(numero_jrv: int, jrvs_procesadas: set, lock: Lock):
-    """Agrega una JRV al conjunto de procesadas y guarda el archivo"""
+    """Add a JRV to the processed set and save the file"""
     with lock:
         jrvs_procesadas.add(numero_jrv)
         try:
@@ -245,7 +245,7 @@ def guardar_jrv_procesada(numero_jrv: int, jrvs_procesadas: set, lock: Lock):
             print(f"⚠️  Error guardando JRV procesada: {e}")
 
 def cargar_json(ruta_json: str) -> List[Dict]:
-    """Carga el JSON con los datos del CNE"""
+    """Load JSON with CNE data"""
     print(f"📂 Cargando datos desde: {ruta_json}")
 
     if not os.path.exists(ruta_json):
@@ -264,21 +264,21 @@ def cargar_json(ruta_json: str) -> List[Dict]:
 
 def convertir_url_drive_descarga(url: str) -> str:
     """
-    Convierte URL de Drive de visualización a descarga directa
+    Convert Drive view URL to direct download URL
     Input:  https://drive.google.com/file/d/FILE_ID/view?usp=sharing
     Output: https://drive.google.com/uc?export=download&id=FILE_ID
     """
     if 'drive.google.com' in url:
-        # Extraer el FILE_ID
+        # Extract the FILE_ID
         if '/file/d/' in url:
             file_id = url.split('/file/d/')[1].split('/')[0]
             return f'https://drive.google.com/uc?export=download&id={file_id}'
     return url
 
 def descargar_pdf(url: str) -> bytes:
-    """Descarga el PDF desde la URL (AWS S3 o Google Drive)"""
+    """Download PDF from URL (AWS S3 or Google Drive)"""
     try:
-        # Convertir URL de Drive si es necesario
+        # Convert Drive URL if necessary
         url_descarga = convertir_url_drive_descarga(url)
 
         response = requests.get(url_descarga, timeout=30)
@@ -290,10 +290,10 @@ def descargar_pdf(url: str) -> bytes:
 
 def extraer_votos_con_gemini(pdf_url: str, model, max_reintentos: int = 3) -> Dict:
     """
-    Envía el PDF a Gemini y extrae los votos con reintentos automáticos
+    Send the PDF to Gemini and extract votes with automatic retries
     """
     for intento in range(max_reintentos):
-        # Descargar PDF
+        # Download PDF
         pdf_content = descargar_pdf(pdf_url)
         if not pdf_content:
             if intento < max_reintentos - 1:
@@ -302,19 +302,19 @@ def extraer_votos_con_gemini(pdf_url: str, model, max_reintentos: int = 3) -> Di
                 continue
             return None
 
-        # Crear archivo temporal
+        # Create temp file
         temp_file = None
 
         try:
-            # Guardar PDF en archivo temporal
+            # Save PDF to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
                 tmp.write(pdf_content)
                 temp_file = tmp.name
 
-            # Subir archivo a Gemini
+            # Upload file to Gemini
             file = genai.upload_file(path=temp_file, mime_type='application/pdf')
 
-            # Esperar a que el archivo se procese
+            # Wait for the file to be processed
             while file.state.name == "PROCESSING":
                 time.sleep(1)
                 file = genai.get_file(file.name)
@@ -328,22 +328,22 @@ def extraer_votos_con_gemini(pdf_url: str, model, max_reintentos: int = 3) -> Di
                     continue
                 return None
 
-            # Generar contenido
+            # Generate content
             response = model.generate_content([file, PROMPT_EXTRACCION])
 
-            # Eliminar archivo de Gemini
+            # Delete file from Gemini
             genai.delete_file(file.name)
 
-            # Parsear respuesta
+            # Parse response
             texto_respuesta = response.text.strip()
 
-            # Limpiar respuesta (a veces Gemini agrega markdown)
+            # Clean up response (Gemini sometimes adds markdown)
             if texto_respuesta.startswith('```json'):
                 texto_respuesta = texto_respuesta.replace('```json', '').replace('```', '').strip()
             elif texto_respuesta.startswith('```'):
                 texto_respuesta = texto_respuesta.replace('```', '').strip()
 
-            # Parsear JSON
+            # Parse JSON
             resultado = json.loads(texto_respuesta)
 
             return resultado
@@ -364,7 +364,7 @@ def extraer_votos_con_gemini(pdf_url: str, model, max_reintentos: int = 3) -> Di
                 continue
             return None
         finally:
-            # Limpiar archivo temporal
+            # Clean up temp file
             if temp_file and os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
@@ -375,15 +375,15 @@ def extraer_votos_con_gemini(pdf_url: str, model, max_reintentos: int = 3) -> Di
 
 def calcular_campos_validacion(acta_original: Dict, datos_pdf: Dict) -> Dict:
     """
-    Calcula campos de validación comparando datos digitados vs PDF
+    Calculate validation fields comparing entered data vs PDF
     """
     if not datos_pdf:
         return acta_original
 
-    # Agregar datos del PDF al acta
+    # Add PDF data to the ballot record
     acta_completa = {**acta_original, **datos_pdf}
 
-    # Calcular sumatoria manual
+    # Calculate manual sum
     suma_manual = sum(filter(None, [
         datos_pdf.get('pdf_votos_dc', 0),
         datos_pdf.get('pdf_votos_libre', 0),
@@ -396,11 +396,11 @@ def calcular_campos_validacion(acta_original: Dict, datos_pdf: Dict) -> Dict:
 
     acta_completa['SumatoriaManualPorPartido'] = suma_manual
 
-    # Código JRV
+    # JRV code
     acta_completa['codigo_jrv'] = acta_original.get('numero_jrv')
 
-    # Validar inconsistencias
-    # 1. Comparar datos digitados con PDF
+    # Validate inconsistencies
+    # 1. Compare entered data with PDF
     inconsistencia_datos = 0
     if (acta_original.get('votos_dc') != datos_pdf.get('pdf_votos_dc') or
         acta_original.get('votos_libre') != datos_pdf.get('pdf_votos_libre') or
@@ -413,7 +413,7 @@ def calcular_campos_validacion(acta_original: Dict, datos_pdf: Dict) -> Dict:
 
     acta_completa['InconsistenciaDatosDigitados'] = inconsistencia_datos
 
-    # 2. Validar gran total vs total votantes
+    # 2. Validate grand total vs total voters
     gran_total = datos_pdf.get('pdf_gran_total')
     total_votantes = datos_pdf.get('pdf_total_votantes')
 
@@ -424,7 +424,7 @@ def calcular_campos_validacion(acta_original: Dict, datos_pdf: Dict) -> Dict:
 
     acta_completa['InconsistenciaGrandTotalPorVotantes'] = inconsistencia_totales
 
-    # 3. Validar JRV
+    # 3. Validate JRV
     jrv_digitado = acta_original.get('numero_jrv')
     jrv_pdf = datos_pdf.get('pdf_jrv')
 
@@ -434,7 +434,7 @@ def calcular_campos_validacion(acta_original: Dict, datos_pdf: Dict) -> Dict:
 
     acta_completa['InconsistenciaJrv'] = inconsistencia_jrv
 
-    # 4. Validar papeletas
+    # 4. Validate ballots
     papeletas_recibidas = datos_pdf.get('pdf_papeletas_recibidas')
     papeletas_no_utilizadas = datos_pdf.get('pdf_papeletas_no_utilizadas')
     papeletas_utilizadas = datos_pdf.get('pdf_papeletas_utilizadas')
@@ -448,7 +448,7 @@ def calcular_campos_validacion(acta_original: Dict, datos_pdf: Dict) -> Dict:
 
     acta_completa['InconsistenciaPapeletas'] = inconsistencia_papeletas
 
-    # 5. Validar números de acta
+    # 5. Validate ballot numbers
     numero_acta_inconsistente = 0
     qr = datos_pdf.get('pdf_numero_acta_qr')
     barra = datos_pdf.get('pdf_numero_acta_barra')
@@ -462,13 +462,13 @@ def calcular_campos_validacion(acta_original: Dict, datos_pdf: Dict) -> Dict:
 
 def guardar_progreso(resultados: List[Dict], archivo_salida: str, lock: Lock):
     """
-    Guarda el progreso actual de forma thread-safe
-    Si el archivo existe, carga los datos existentes y actualiza/agrega los nuevos
+    Save current progress in a thread-safe manner
+    If the file exists, loads existing data and updates/appends new entries
     """
     with lock:
         datos_existentes = []
 
-        # Cargar datos existentes si el archivo existe
+        # Load existing data if the file exists
         if os.path.exists(archivo_salida):
             try:
                 with open(archivo_salida, 'r', encoding='utf-8') as f:
@@ -479,38 +479,38 @@ def guardar_progreso(resultados: List[Dict], archivo_salida: str, lock: Lock):
                 print(f"⚠️  Error cargando datos existentes: {e}")
                 datos_existentes = []
 
-        # Crear un diccionario de datos existentes indexado por numero_jrv
+        # Build a dictionary of existing data indexed by numero_jrv
         dict_existentes = {acta.get('numero_jrv'): acta for acta in datos_existentes}
 
-        # Actualizar/agregar nuevos resultados
+        # Update/append new results
         for acta in resultados:
             numero_jrv = acta.get('numero_jrv')
             if numero_jrv:
                 dict_existentes[numero_jrv] = acta
 
-        # Convertir de vuelta a lista ordenada por numero_jrv
+        # Convert back to sorted list by numero_jrv
         datos_finales = sorted(dict_existentes.values(), key=lambda x: x.get('numero_jrv', 0))
 
-        # Guardar
+        # Save
         with open(archivo_salida, 'w', encoding='utf-8') as f:
             json.dump(datos_finales, f, ensure_ascii=False, indent=2)
 
 def procesar_acta_worker(acta: Dict, model, jrvs_procesadas: set, resultados: List[Dict],
                           lock: Lock, stats: Dict, jrvs_fallidas: List[int]) -> bool:
     """
-    Procesa una sola acta en un worker thread
-    Retorna True si fue exitosa, False si hubo error
+    Process a single ballot in a worker thread
+    Returns True if successful, False if there was an error
     """
     numero_jrv = acta.get('numero_jrv', 'Desconocido')
     municipio = acta.get('municipio', 'Desconocido')
 
-    # Verificar si ya fue procesada
+    # Check if already processed
     if numero_jrv in jrvs_procesadas:
         with lock:
             print(f"⏭️  JRV {numero_jrv} - {municipio} (ya procesada, omitiendo)")
         return True
 
-    # SOLO usar URL de Drive (permanente)
+    # ONLY use Drive URL (permanent)
     url_pdf = acta.get('url_drive')
 
     with lock:
@@ -521,23 +521,23 @@ def procesar_acta_worker(acta: Dict, model, jrvs_procesadas: set, resultados: Li
             print(f"   ⚠️  Sin URL de Drive, omitiendo...")
         return True
 
-    # Extraer datos con Gemini (con 3 reintentos automáticos)
+    # Extract data with Gemini (with 3 automatic retries)
     datos_pdf = extraer_votos_con_gemini(url_pdf, model, max_reintentos=3)
 
     if datos_pdf:
-        # Calcular campos de validación
+        # Calculate validation fields
         acta_completa = calcular_campos_validacion(acta, datos_pdf)
 
-        # Eliminar URL del CNE (expira en 2h)
+        # Remove CNE URL (expires in 2h)
         if 'url_acta_pdf' in acta_completa:
             del acta_completa['url_acta_pdf']
 
         resultados.append(acta_completa)
 
-        # Guardar en registro de procesadas
+        # Save in processed registry
         guardar_jrv_procesada(numero_jrv, jrvs_procesadas, lock)
 
-        # Mostrar resumen
+        # Show summary
         inconsistencias = sum([
             acta_completa.get('InconsistenciaDatosDigitados', 0),
             acta_completa.get('InconsistenciaGrandTotalPorVotantes', 0),
@@ -550,7 +550,7 @@ def procesar_acta_worker(acta: Dict, model, jrvs_procesadas: set, resultados: Li
         with lock:
             print(f"   {estado}")
             stats['exitosas'] += 1
-            stats['fallos_consecutivos'] = 0  # Resetear contador
+            stats['fallos_consecutivos'] = 0  # Reset counter
         return True
     else:
         with lock:
@@ -562,7 +562,7 @@ def procesar_acta_worker(acta: Dict, model, jrvs_procesadas: set, resultados: Li
         return False
 
 def main():
-    # Parsear argumentos de línea de comandos
+    # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description='Validador de Actas con Google Gemini 2.0 Flash',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -592,20 +592,20 @@ Códigos de departamentos:
     print("=" * 80)
     print()
 
-    # Validar parámetros
+    # Validate parameters
     id_departamento = None
     nombre_departamento = None
     archivo_salida = JSON_OUTPUT
     numero_jrv_especifica = args.jrv
 
-    # Modo JRV específica
+    # Specific JRV mode
     if numero_jrv_especifica:
         print(f"🎯 Modo JRV específica: {numero_jrv_especifica}")
         print(f"   Se procesará solo esta JRV y se sobrescribirá en su archivo de departamento\n")
 
-    # Validar departamento
+    # Validate department
     if args.depto:
-        id_departamento = args.depto.zfill(2)  # Asegurar 2 dígitos (5 -> 05)
+        id_departamento = args.depto.zfill(2)  # Ensure 2 digits (5 -> 05)
 
         if id_departamento not in DEPARTAMENTOS:
             print(f"❌ Error: Departamento '{id_departamento}' no válido")
@@ -625,7 +625,7 @@ Códigos de departamentos:
         print(f"   Usa --depto XX para procesar un departamento específico")
         print(f"   Usa --jrv XXXX para procesar una JRV específica\n")
 
-    # Mostrar configuración
+    # Show configuration
     tier = "GRATUITO (15 req/min)" if USAR_TIER_GRATUITO else "PAGADO (sin límite)"
     print(f"⚙️  Configuración:")
     print(f"   Modelo: {MODELO}")
@@ -637,7 +637,7 @@ Códigos de departamentos:
         print(f"   Límite de actas: {LIMITE_ACTAS} (modo prueba)")
     print()
 
-    # Configurar Gemini
+    # Configure Gemini
     print("🔧 Configurando Google Gemini...")
     try:
         model = configurar_gemini()
@@ -647,15 +647,15 @@ Códigos de departamentos:
         print("💡 Verifica que tu API Key sea válida")
         sys.exit(1)
 
-    # Cargar JRVs ya procesadas
+    # Load already-processed JRVs
     print("📋 Cargando registro de JRVs procesadas...")
     jrvs_procesadas = cargar_jrvs_procesadas()
     print(f"✅ {len(jrvs_procesadas)} JRVs ya procesadas anteriormente\n")
 
-    # Cargar datos
+    # Load data
     datos = cargar_json(JSON_INPUT)
 
-    # Filtrar por JRV específica
+    # Filter by specific JRV
     if numero_jrv_especifica:
         datos = [acta for acta in datos if acta.get('numero_jrv') == numero_jrv_especifica]
 
@@ -663,7 +663,7 @@ Códigos de departamentos:
             print(f"❌ Error: No se encontró la JRV {numero_jrv_especifica}")
             sys.exit(1)
 
-        # Determinar archivo de salida basado en el departamento de la JRV
+        # Determine output file based on JRV department
         acta_encontrada = datos[0]
         id_departamento = acta_encontrada.get('id_departamento')
         if id_departamento and id_departamento in DEPARTAMENTOS:
@@ -675,15 +675,15 @@ Códigos de departamentos:
         else:
             print(f"⚠️  No se pudo determinar departamento, usando archivo por defecto\n")
 
-        # Forzar procesamiento aunque ya esté en jrvs_procesadas (modo sobreescribir)
+        # Force processing even if already in jrvs_procesadas (overwrite mode)
         actas_pendientes = datos
     else:
-        # Filtrar por departamento si se especificó
+        # Filter by department if specified
         if id_departamento:
             datos = [acta for acta in datos if acta.get('id_departamento') == id_departamento]
             print(f"🔍 Filtrado por departamento {id_departamento}: {len(datos)} actas encontradas\n")
 
-        # Filtrar actas que NO han sido procesadas
+        # Filter ballots that have NOT been processed
         actas_pendientes = [acta for acta in datos
                             if acta.get('numero_jrv') not in jrvs_procesadas]
 
@@ -691,7 +691,7 @@ Códigos de departamentos:
         print(f"✅ Ya procesadas: {len(datos) - len(actas_pendientes)}")
         print(f"⏳ Pendientes: {len(actas_pendientes)}\n")
 
-    # Aplicar límite si está configurado (solo a las pendientes)
+    # Apply limit if configured (pending only)
     if LIMITE_ACTAS:
         actas_pendientes = actas_pendientes[:LIMITE_ACTAS]
         print(f"⚠️  Modo prueba: procesando solo {len(actas_pendientes)} actas pendientes\n")
@@ -700,7 +700,7 @@ Códigos de departamentos:
         print("✅ No hay actas pendientes por procesar!")
         return
 
-    # Procesar actas con concurrencia
+    # Process ballots with concurrency
     print("=" * 80)
     print(f"🚀 INICIANDO PROCESAMIENTO DE {len(actas_pendientes)} ACTAS")
     print("=" * 80)
@@ -713,28 +713,28 @@ Códigos de departamentos:
     tiempo_inicio = time.time()
     proceso_detenido = False
 
-    # Usar ThreadPoolExecutor para procesamiento concurrente
+    # Use ThreadPoolExecutor for concurrent processing
     with ThreadPoolExecutor(max_workers=CONCURRENCIA_MAXIMA) as executor:
         futures = []
 
         for acta in actas_pendientes:
-            # Enviar tarea al pool
+            # Submit task to the pool
             future = executor.submit(
                 procesar_acta_worker,
                 acta, model, jrvs_procesadas, resultados, lock, stats, jrvs_fallidas
             )
             futures.append(future)
 
-            # Rate limiting: esperar entre envíos
+            # Rate limiting: wait between submissions
             time.sleep(DELAY_ENTRE_REQUESTS)
 
-        # Esperar a que terminen todas las tareas
+        # Wait for all tasks to complete
         contador = 0
         for future in futures:
-            future.result()  # Esperar a que complete
+            future.result()  # Wait until complete
             contador += 1
 
-            # Verificar si hay 3 fallos consecutivos
+            # Check if there are 3 consecutive failures
             with lock:
                 if stats['fallos_consecutivos'] >= 3:
                     print()
@@ -747,13 +747,13 @@ Códigos de departamentos:
                     proceso_detenido = True
                     break
 
-            # Guardar progreso cada 10 actas
+            # Save progress every 10 ballots
             if contador % 10 == 0:
                 guardar_progreso(resultados, archivo_salida, lock)
                 with lock:
                     print(f"💾 Progreso guardado ({contador}/{len(actas_pendientes)})")
 
-            # Estadísticas cada 25 actas
+            # Statistics every 25 ballots
             if contador % 25 == 0:
                 tiempo_transcurrido = time.time() - tiempo_inicio
                 velocidad = contador / tiempo_transcurrido if tiempo_transcurrido > 0 else 0
@@ -767,13 +767,13 @@ Códigos de departamentos:
                     print(f"✅ Exitosas: {stats['exitosas']} | ❌ Errores: {stats['errores']}")
                     print()
 
-    # Guardar resultado final
+    # Save final result
     print()
     print("=" * 80)
     print("💾 Guardando resultado final...")
     guardar_progreso(resultados, archivo_salida, lock)
 
-    # Estadísticas finales
+    # Final statistics
     tiempo_total = time.time() - tiempo_inicio
 
     print()
@@ -792,7 +792,7 @@ Códigos de departamentos:
     print("=" * 80)
     print()
 
-    # Calcular inconsistencias
+    # Count inconsistencies
     total_inconsistencias = sum(1 for r in resultados
                                 if r.get('InconsistenciaDatosDigitados', 0) == 1)
 
@@ -803,7 +803,7 @@ Códigos de departamentos:
         print(f"   Porcentaje de precisión: {((len(resultados) - total_inconsistencias) / len(resultados) * 100):.1f}%")
     print()
 
-    # Mostrar JRVs que fallaron completamente
+    # Show JRVs that failed completely
     if len(jrvs_fallidas) > 0:
         print("=" * 80)
         print(f"⚠️  JRVs QUE FALLARON COMPLETAMENTE ({len(jrvs_fallidas)} actas)")
@@ -812,7 +812,7 @@ Códigos de departamentos:
         print("Las siguientes JRVs fallaron después de 3 reintentos:")
         print()
 
-        # Guardar en archivo para fácil reprocesamiento
+        # Save to file for easy reprocessing
         archivo_fallidas = 'jrvs_fallidas.json'
         with open(archivo_fallidas, 'w', encoding='utf-8') as f:
             json.dump({
@@ -821,7 +821,7 @@ Códigos de departamentos:
                 'fecha': time.strftime('%Y-%m-%d %H:%M:%S')
             }, f, ensure_ascii=False, indent=2)
 
-        # Mostrar en grupos de 10 por línea
+        # Show in groups of 10 per line
         for i in range(0, len(jrvs_fallidas), 10):
             grupo = jrvs_fallidas[i:i+10]
             print(f"   {', '.join(map(str, grupo))}")

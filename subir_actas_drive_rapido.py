@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script PARALELO para subir actas del CNE Honduras a Google Drive
-Usa multithreading para acelerar el proceso de descarga y subida
-VERSIÓN OPTIMIZADA: 10-20x más rápido que la versión secuencial
+Parallel script to upload CNE Honduras ballots to Google Drive
+Uses multithreading to speed up the download and upload process
+OPTIMIZED VERSION: 10-20x faster than the sequential version
 """
 
 import json
@@ -20,33 +20,33 @@ from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 
 # ============================================================================
-# CONFIGURACIÓN
+# CONFIGURATION
 # ============================================================================
 
-# Archivo JSON con los datos de las actas
+# JSON file with ballot data
 JSON_FILE = 'resultados_jrv_detallado.json'
 
-# Carpeta local temporal para descargar PDFs
+# Local temp folder for downloading PDFs
 TEMP_FOLDER = 'actas_temp'
 
-# Carpeta para logs de subidas exitosas
+# Folder for successful upload logs
 LOGS_FOLDER = 'LogsSubidas'
 
-# Scopes necesarios para Google Drive
+# Required scopes for Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-# ID de la carpeta raíz en Google Drive
+# Root folder ID in Google Drive
 PARENT_FOLDER_ID = '1PqARS1zO82dv1S7_lokXHswBCAUaCZ2F'
 
-# CONFIGURACIÓN DE PARALELISMO
-# Número de hilos para descargar PDFs (puede ser alto, son peticiones HTTP)
-NUM_HILOS_DESCARGA = 20  # Ajusta según tu conexión (10-50)
+# PARALLELISM CONFIGURATION
+# Number of threads for downloading PDFs (can be high, they're HTTP requests)
+NUM_HILOS_DESCARGA = 20  # Adjust based on your connection (10-50)
 
-# Número de hilos para subir a Drive (API tiene rate limits)
-NUM_HILOS_SUBIDA = 10  # Ajusta según errores de rate limit (5-15)
+# Number of threads for uploading to Drive (API has rate limits)
+NUM_HILOS_SUBIDA = 10  # Adjust based on rate limit errors (5-15)
 
 # ============================================================================
-# VARIABLES GLOBALES PARA ESTADÍSTICAS
+# GLOBAL STATISTICS VARIABLES
 # ============================================================================
 
 stats_lock = Lock()
@@ -56,18 +56,18 @@ stats = {
     'fallidas': 0,
     'saltadas': 0,
     'total': 0,
-    'jrv_nuevas': [],      # Lista de JRVs nuevas subidas
-    'jrv_fallidas': []     # Lista de JRVs fallidas
+    'jrv_nuevas': [],      # List of newly uploaded JRVs
+    'jrv_fallidas': []     # List of failed JRVs
 }
 
 # ============================================================================
-# AUTENTICACIÓN CON GOOGLE DRIVE
+# GOOGLE DRIVE AUTHENTICATION
 # ============================================================================
 
 def autenticar_google_drive():
     """
-    Autentica con Google Drive API usando OAuth 2.0
-    Retorna el servicio de Google Drive
+    Authenticate with Google Drive API using OAuth 2.0
+    Returns the Google Drive service
     """
     creds = None
 
@@ -88,12 +88,12 @@ def autenticar_google_drive():
     return build('drive', 'v3', credentials=creds)
 
 # ============================================================================
-# FUNCIONES DE GOOGLE DRIVE
+# GOOGLE DRIVE FUNCTIONS
 # ============================================================================
 
 def buscar_carpeta(service, nombre_carpeta, parent_id=None):
     """
-    Busca una carpeta por nombre en Google Drive
+    Search for a folder by name in Google Drive
     """
     try:
         query = f"name='{nombre_carpeta}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
@@ -120,7 +120,7 @@ def buscar_carpeta(service, nombre_carpeta, parent_id=None):
 
 def crear_carpeta(service, nombre_carpeta, parent_id=None):
     """
-    Crea una carpeta en Google Drive
+    Create a folder in Google Drive
     """
     try:
         file_metadata = {
@@ -145,7 +145,7 @@ def crear_carpeta(service, nombre_carpeta, parent_id=None):
 
 def obtener_o_crear_carpeta(service, nombre_carpeta, parent_id=None):
     """
-    Obtiene el ID de una carpeta existente o la crea si no existe
+    Get the ID of an existing folder or create it if it doesn't exist
     """
     folder_id = buscar_carpeta(service, nombre_carpeta, parent_id)
 
@@ -157,7 +157,7 @@ def obtener_o_crear_carpeta(service, nombre_carpeta, parent_id=None):
 
 def buscar_archivo(service, nombre_archivo, folder_id):
     """
-    Busca un archivo por nombre en una carpeta específica
+    Search for a file by name in a specific folder
     """
     try:
         query = f"name='{nombre_archivo}' and '{folder_id}' in parents and trashed=false"
@@ -176,22 +176,22 @@ def buscar_archivo(service, nombre_archivo, folder_id):
         return None
 
     except HttpError as error:
-        # Silenciar errores de búsqueda
+        # Suppress search errors
         return None
 
 def subir_archivo(service, file_path, folder_id, nombre_archivo):
     """
-    Sube un archivo a Google Drive
-    Si el archivo ya existe, lo SALTA (no lo reemplaza)
+    Upload a file to Google Drive
+    If the file already exists, it SKIPS it (does not replace)
     """
     try:
         file_id = buscar_archivo(service, nombre_archivo, folder_id)
 
         if file_id:
-            # Archivo ya existe, saltarlo
+            # File already exists, skip it
             return file_id
 
-        # Crear nuevo archivo
+        # Create new file
         file_metadata = {
             'name': nombre_archivo,
             'parents': [folder_id]
@@ -212,31 +212,31 @@ def subir_archivo(service, file_path, folder_id, nombre_archivo):
         return None
 
 # ============================================================================
-# FUNCIONES DE LOGS CORRELATIVOS
+# SEQUENTIAL LOG FUNCTIONS
 # ============================================================================
 
 def obtener_siguiente_correlativo(carpeta_logs):
     """
-    Busca archivos en la carpeta de logs y retorna el siguiente número de correlativo
+    Search for files in the logs folder and return the next sequential number
     """
     if not os.path.exists(carpeta_logs):
         return 1
 
-    # Listar archivos en la carpeta
+    # List files in the folder
     archivos = os.listdir(carpeta_logs)
 
-    # Filtrar solo archivos .json y extraer números
+    # Filter only .json files and extract numbers
     correlativos = []
     for archivo in archivos:
         if archivo.endswith('.json'):
             try:
-                # Extraer número del nombre (1.json, 2.json, etc.)
+                # Extract number from filename (1.json, 2.json, etc.)
                 numero = int(archivo.replace('.json', ''))
                 correlativos.append(numero)
             except ValueError:
                 continue
 
-    # Retornar siguiente número
+    # Return next number
     if correlativos:
         return max(correlativos) + 1
     else:
@@ -244,27 +244,27 @@ def obtener_siguiente_correlativo(carpeta_logs):
 
 def guardar_log_exitosas(jrvs_nuevas, carpeta_logs):
     """
-    Guarda log de JRVs subidas exitosamente con correlativo
-    Formato: [1, 2, 3, 4, ...]
+    Save log of successfully uploaded JRVs with sequential number
+    Format: [1, 2, 3, 4, ...]
     """
-    # Crear carpeta si no existe
+    # Create folder if it doesn't exist
     if not os.path.exists(carpeta_logs):
         os.makedirs(carpeta_logs)
         print(f"✅ Carpeta de logs creada: {carpeta_logs}")
 
-    # Obtener siguiente correlativo
+    # Get next sequential number
     correlativo = obtener_siguiente_correlativo(carpeta_logs)
 
-    # Extraer solo los números de JRV
+    # Extract only JRV numbers
     numeros_jrv = [item['jrv'] for item in jrvs_nuevas]
 
-    # Ordenar
+    # Sort
     numeros_jrv.sort()
 
-    # Nombre del archivo
+    # Filename
     nombre_archivo = os.path.join(carpeta_logs, f"{correlativo}.json")
 
-    # Guardar
+    # Save
     with open(nombre_archivo, 'w', encoding='utf-8') as f:
         json.dump(numeros_jrv, f, indent=2)
 
@@ -274,12 +274,12 @@ def guardar_log_exitosas(jrvs_nuevas, carpeta_logs):
     return nombre_archivo, correlativo
 
 # ============================================================================
-# FUNCIONES DE DESCARGA
+# DOWNLOAD FUNCTIONS
 # ============================================================================
 
 def descargar_pdf(url, file_path):
     """
-    Descarga un PDF desde una URL
+    Download a PDF from a URL
     """
     try:
         response = requests.get(url, timeout=30)
@@ -294,13 +294,13 @@ def descargar_pdf(url, file_path):
         return False
 
 # ============================================================================
-# FUNCIÓN PARALELA: PROCESAR UN ACTA
+# PARALLEL FUNCTION: PROCESS A BALLOT
 # ============================================================================
 
 def procesar_acta(acta, folder_id, service, departamento):
     """
-    Procesa una acta: descarga PDF y sube a Drive
-    Esta función se ejecuta en paralelo en múltiples hilos
+    Process a ballot: download PDF and upload to Drive
+    This function runs in parallel across multiple threads
     """
     numero_jrv = acta.get('numero_jrv', 'DESCONOCIDO')
     municipio = acta.get('municipio', 'DESCONOCIDO')
@@ -318,20 +318,20 @@ def procesar_acta(acta, folder_id, service, departamento):
             })
         return False
 
-    # Nombre del archivo
+    # Filename
     nombre_archivo = f"JRV_{numero_jrv}.pdf"
 
-    # Verificar si el archivo ya existe en Drive
+    # Check if the file already exists in Drive
     file_id_existente = buscar_archivo(service, nombre_archivo, folder_id)
 
     if file_id_existente:
-        # Archivo ya existe, saltarlo
+        # File already exists, skip it
         with stats_lock:
             stats['procesadas'] += 1
             stats['saltadas'] += 1
-            stats['exitosas'] += 1  # Contar como exitosa porque ya está en Drive
+            stats['exitosas'] += 1  # Count as successful because it's already in Drive
 
-            # Mostrar progreso cada 50 archivos
+            # Show progress every 50 files
             if stats['procesadas'] % 50 == 0:
                 porcentaje = stats['procesadas'] * 100 // stats['total']
                 print(f"Progreso: {stats['procesadas']}/{stats['total']} ({porcentaje}%) - "
@@ -340,7 +340,7 @@ def procesar_acta(acta, folder_id, service, departamento):
 
     temp_file = os.path.join(TEMP_FOLDER, f"{numero_jrv}_{os.getpid()}_{time.time()}.pdf")
 
-    # Descargar PDF
+    # Download PDF
     if not descargar_pdf(url_pdf, temp_file):
         with stats_lock:
             stats['procesadas'] += 1
@@ -353,16 +353,16 @@ def procesar_acta(acta, folder_id, service, departamento):
             })
         return False
 
-    # Subir a Google Drive
+    # Upload to Google Drive
     file_id = subir_archivo(service, temp_file, folder_id, nombre_archivo)
 
-    # Eliminar archivo temporal
+    # Delete temp file
     try:
         os.remove(temp_file)
     except:
         pass
 
-    # Actualizar estadísticas
+    # Update statistics
     with stats_lock:
         stats['procesadas'] += 1
         if file_id:
@@ -381,7 +381,7 @@ def procesar_acta(acta, folder_id, service, departamento):
                 'razon': 'Error subiendo a Drive'
             })
 
-        # Mostrar progreso cada 50 archivos
+        # Show progress every 50 files
         if stats['procesadas'] % 50 == 0:
             porcentaje = stats['procesadas'] * 100 // stats['total']
             print(f"Progreso: {stats['procesadas']}/{stats['total']} ({porcentaje}%) - "
@@ -390,12 +390,12 @@ def procesar_acta(acta, folder_id, service, departamento):
     return file_id is not None
 
 # ============================================================================
-# FUNCIÓN PRINCIPAL
+# MAIN FUNCTION
 # ============================================================================
 
 def main():
     """
-    Función principal que procesa el JSON y sube las actas en paralelo
+    Main function that processes the JSON and uploads ballots in parallel
     """
     print("=" * 80, flush=True)
     print("SUBIR ACTAS CNE HONDURAS A GOOGLE DRIVE - VERSION PARALELA", flush=True)
@@ -404,14 +404,14 @@ def main():
     print(f"Hilos de subida: {NUM_HILOS_SUBIDA}", flush=True)
     print(flush=True)
 
-    # Crear carpeta temporal
+    # Create temp folder
     print(f"Creando carpeta temporal: {TEMP_FOLDER}", flush=True)
     if not os.path.exists(TEMP_FOLDER):
         os.makedirs(TEMP_FOLDER)
     print("OK - Carpeta temporal creada", flush=True)
     print(flush=True)
 
-    # Cargar JSON
+    # Load JSON
     print(f"Cargando JSON: {JSON_FILE}", flush=True)
     try:
         with open(JSON_FILE, 'r', encoding='utf-8') as f:
@@ -426,7 +426,7 @@ def main():
     print(f"OK - JSON cargado: {len(actas)} actas encontradas", flush=True)
     print(flush=True)
 
-    # Autenticar con Google Drive
+    # Authenticate with Google Drive
     print("Autenticando con Google Drive...", flush=True)
     try:
         service = autenticar_google_drive()
@@ -436,7 +436,7 @@ def main():
         print(f"ERROR en autenticacion: {e}", flush=True)
         return
 
-    # Agrupar actas por departamento
+    # Group ballots by department
     actas_por_departamento = {}
     for acta in actas:
         dept = acta.get('departamento', 'DESCONOCIDO')
@@ -447,19 +447,19 @@ def main():
     print(f"📊 Actas agrupadas en {len(actas_por_departamento)} departamentos")
     print()
 
-    # Inicializar estadísticas
+    # Initialize statistics
     stats['total'] = len(actas)
 
-    # Tiempo de inicio
+    # Start time
     tiempo_inicio = time.time()
 
-    # Procesar cada departamento
+    # Process each department
     for departamento, actas_dept in actas_por_departamento.items():
         print("=" * 80)
         print(f"📍 DEPARTAMENTO: {departamento} ({len(actas_dept)} actas)")
         print("=" * 80)
 
-        # Obtener o crear carpeta del departamento
+        # Get or create the department folder
         folder_id = obtener_o_crear_carpeta(service, departamento, PARENT_FOLDER_ID)
 
         if not folder_id:
@@ -471,19 +471,19 @@ def main():
         print(f"🚀 Procesando {len(actas_dept)} actas en paralelo...")
         print()
 
-        # Procesar actas en paralelo usando ThreadPoolExecutor
+        # Process ballots in parallel using ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=NUM_HILOS_SUBIDA) as executor:
-            # Crear un servicio de Drive para cada hilo
-            # (la API de Google no es thread-safe, cada hilo necesita su propia instancia)
+            # Create a Drive service for each thread
+            # (Google API is not thread-safe, each thread needs its own instance)
             futures = []
 
             for acta in actas_dept:
-                # Crear un nuevo servicio para cada tarea
+                # Create a new service for each task
                 service_local = autenticar_google_drive()
                 future = executor.submit(procesar_acta, acta, folder_id, service_local, departamento)
                 futures.append(future)
 
-            # Esperar a que todas las tareas terminen
+            # Wait for all tasks to finish
             for future in as_completed(futures):
                 try:
                     future.result()
@@ -494,10 +494,10 @@ def main():
 
         print()
 
-    # Tiempo total
+    # Total time
     tiempo_total = time.time() - tiempo_inicio
 
-    # Resumen final
+    # Final summary
     print()
     print("=" * 80, flush=True)
     print("RESUMEN FINAL", flush=True)
@@ -512,7 +512,7 @@ def main():
     print(f"Velocidad: {stats['total']/tiempo_total*60:.1f} actas/minuto", flush=True)
     print(flush=True)
 
-    # Mostrar JRVs nuevas subidas
+    # Show newly uploaded JRVs
     if stats['jrv_nuevas']:
         print("=" * 80, flush=True)
         print(f"JRVs NUEVAS SUBIDAS ({len(stats['jrv_nuevas'])})", flush=True)
@@ -521,7 +521,7 @@ def main():
             print(f"  JRV {item['jrv']} - {item['departamento']} - {item['municipio']}", flush=True)
         print(flush=True)
 
-    # Mostrar JRVs fallidas
+    # Show failed JRVs
     if stats['jrv_fallidas']:
         print("=" * 80, flush=True)
         print(f"JRVs FALLIDAS ({len(stats['jrv_fallidas'])})", flush=True)
@@ -532,7 +532,7 @@ def main():
 
     print()
 
-    # Guardar log de JRVs subidas exitosamente
+    # Save log of successfully uploaded JRVs
     if stats['jrv_nuevas']:
         print("=" * 80, flush=True)
         print("GUARDANDO LOG DE JRVs EXITOSAS", flush=True)
@@ -545,9 +545,9 @@ def main():
             print(f"❌ Error guardando log: {e}")
         print()
 
-    # Limpiar carpeta temporal
+    # Clean up temp folder
     try:
-        # Eliminar archivos residuales
+        # Delete leftover files
         for file in os.listdir(TEMP_FOLDER):
             try:
                 os.remove(os.path.join(TEMP_FOLDER, file))
@@ -559,7 +559,7 @@ def main():
         print(f"⚠️  No se pudo eliminar carpeta temporal: {TEMP_FOLDER}")
 
 # ============================================================================
-# EJECUCIÓN
+# EXECUTION
 # ============================================================================
 
 if __name__ == '__main__':

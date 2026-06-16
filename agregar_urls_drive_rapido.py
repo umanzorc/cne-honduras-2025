@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script RÁPIDO para agregar URLs de Google Drive al JSON
-Versión con procesamiento asíncrono en lotes para 19,000 actas
+Fast script to add Google Drive URLs to the JSON
+Version with async batch processing for 19,000 ballots
 """
 
 import json
@@ -17,36 +17,36 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import time
 
-# Configurar encoding UTF-8 para Windows
+# Configure UTF-8 encoding for Windows
 if sys.platform == 'win32':
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # ============================================================================
-# CONFIGURACIÓN
+# CONFIGURATION
 # ============================================================================
 
 JSON_INPUT = 'resultados_jrv_detallado.json'
 JSON_OUTPUT = 'resultados_jrv_detallado_con_urls.json'
-JSON_REFERENCIA = 'resultados_jrvs_faltantes.json'  # JSON con datos actualizados (votos_nulos, votos_blanco)
+JSON_REFERENCIA = 'resultados_jrvs_faltantes.json'  # JSON with updated data (votos_nulos, votos_blanco)
 LOG_FALTANTES = 'actas_sin_url_drive.json'
 LOG_TEXTO = 'actas_sin_url_drive.log'
 PARENT_FOLDER_ID = '1PqARS1zO82dv1S7_lokXHswBCAUaCZ2F'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 HACER_PUBLICOS = True
-ACTUALIZAR_VOTOS = True  # Si True, actualiza votos_nulos y votos_blanco desde JSON_REFERENCIA
+ACTUALIZAR_VOTOS = True  # If True, updates votos_nulos and votos_blanco from JSON_REFERENCIA
 
-# Configuración de concurrencia
-CONCURRENCIA_ARCHIVOS = 50  # Procesar 50 archivos en paraleloe
-MAX_WORKERS = 10  # Threads para Google Drive API
+# Concurrency settings
+CONCURRENCIA_ARCHIVOS = 50  # Process 50 files in parallel
+MAX_WORKERS = 10  # Threads for Google Drive API
 
 # ============================================================================
-# AUTENTICACIÓN
+# AUTHENTICATION
 # ============================================================================
 
 def autenticar_google_drive():
-    """Autentica con Google Drive API"""
+    """Authenticate with Google Drive API"""
     creds = None
 
     if os.path.exists('token.json'):
@@ -65,11 +65,11 @@ def autenticar_google_drive():
     return build('drive', 'v3', credentials=creds)
 
 # ============================================================================
-# FUNCIONES DE GOOGLE DRIVE
+# GOOGLE DRIVE FUNCTIONS
 # ============================================================================
 
 def buscar_carpeta(service, nombre_carpeta, parent_id=None):
-    """Busca carpeta por nombre"""
+    """Search folder by name"""
     try:
         query = f"name='{nombre_carpeta}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
         if parent_id:
@@ -84,8 +84,8 @@ def buscar_carpeta(service, nombre_carpeta, parent_id=None):
 
 def listar_archivos_carpeta(service, folder_id):
     """
-    Lista TODOS los archivos de una carpeta de una vez
-    Retorna dict: {nombre_archivo: {id, webViewLink}}
+    List ALL files in a folder at once
+    Returns dict: {file_name: {id, webViewLink}}
     """
     try:
         archivos = {}
@@ -119,7 +119,7 @@ def listar_archivos_carpeta(service, folder_id):
         return {}
 
 def hacer_publico(service, file_id):
-    """Hace archivo público"""
+    """Make file public"""
     try:
         permission = {'type': 'anyone', 'role': 'reader'}
         service.permissions().create(fileId=file_id, body=permission).execute()
@@ -130,15 +130,15 @@ def hacer_publico(service, file_id):
         return False
 
 # ============================================================================
-# PROCESAMIENTO ASÍNCRONO
+# ASYNC PROCESSING
 # ============================================================================
 
 async def procesar_acta(service, acta, archivos_drive, hacer_publico_flag):
-    """Procesa una acta individual"""
+    """Process an individual ballot"""
     numero_jrv = acta.get('numero_jrv', 'DESCONOCIDO')
     nombre_archivo = f"JRV_{numero_jrv}.pdf"
 
-    # Buscar en el dict de archivos (ya precargado)
+    # Look up in the files dict (already preloaded)
     if nombre_archivo not in archivos_drive:
         return None, 'archivo_no_encontrado'
 
@@ -146,13 +146,13 @@ async def procesar_acta(service, acta, archivos_drive, hacer_publico_flag):
     file_id = archivo_info['id']
     url_drive = archivo_info['webViewLink']
 
-    # Hacer público si está configurado
+    # Make public if configured
     if hacer_publico_flag and not url_drive:
-        # Ejecutar en thread pool (Google API no es async)
+        # Run in thread pool (Google API is not async)
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, hacer_publico, service, file_id)
 
-        # Obtener URL después de hacer público
+        # Get URL after making public
         try:
             file = service.files().get(fileId=file_id, fields='webViewLink').execute()
             url_drive = file.get('webViewLink', '')
@@ -165,17 +165,17 @@ async def procesar_acta(service, acta, archivos_drive, hacer_publico_flag):
     return url_drive, 'ok'
 
 async def procesar_departamento(service, departamento, actas_dept, actas_faltantes):
-    """Procesa todas las actas de un departamento en paralelo"""
+    """Process all ballots from a department in parallel"""
     print(f"\n{'='*80}")
     print(f"📍 DEPARTAMENTO: {departamento} ({len(actas_dept)} actas)")
     print(f"{'='*80}")
 
-    # Buscar carpeta del departamento
+    # Search for the department folder
     folder_id = buscar_carpeta(service, departamento, PARENT_FOLDER_ID)
 
     if not folder_id:
         print(f"⚠️  Carpeta no encontrada: {departamento}")
-        # Agregar todas las actas al log de faltantes
+        # Add all ballots to the missing log
         for acta in actas_dept:
             actas_faltantes.append({
                 'numero_jrv': acta.get('numero_jrv'),
@@ -187,19 +187,19 @@ async def procesar_departamento(service, departamento, actas_dept, actas_faltant
 
     print(f"📁 Carpeta encontrada: {departamento}")
 
-    # CLAVE: Listar TODOS los archivos de la carpeta DE UNA VEZ
+    # KEY: List ALL files in the folder AT ONCE
     print(f"📋 Listando archivos en Drive...")
     archivos_drive = listar_archivos_carpeta(service, folder_id)
     print(f"✅ {len(archivos_drive)} archivos encontrados en Drive")
 
-    # Procesar actas en lotes
+    # Process ballots in batches
     urls_agregadas = 0
     no_encontrados = 0
 
     for i in range(0, len(actas_dept), CONCURRENCIA_ARCHIVOS):
         lote = actas_dept[i:i + CONCURRENCIA_ARCHIVOS]
 
-        # Procesar lote en paralelo
+        # Process batch in parallel
         tareas = [
             procesar_acta(service, acta, archivos_drive, HACER_PUBLICOS)
             for acta in lote
@@ -207,17 +207,17 @@ async def procesar_departamento(service, departamento, actas_dept, actas_faltant
 
         resultados = await asyncio.gather(*tareas)
 
-        # Agregar URLs al JSON y registrar faltantes
+        # Add URLs to JSON and log missing entries
         for acta, (url_drive, estado) in zip(lote, resultados):
             if url_drive:
                 acta['url_drive'] = url_drive
-                # Eliminar URL del CNE (expira en 2h, ya no la necesitamos)
+                # Remove CNE URL (expires in 2h, no longer needed)
                 if 'url_acta_pdf' in acta:
                     del acta['url_acta_pdf']
                 urls_agregadas += 1
             else:
                 no_encontrados += 1
-                # Agregar al log de faltantes
+                # Add to missing log
                 actas_faltantes.append({
                     'numero_jrv': acta.get('numero_jrv'),
                     'departamento': acta.get('departamento'),
@@ -228,19 +228,19 @@ async def procesar_departamento(service, departamento, actas_dept, actas_faltant
                     'nombre_archivo_esperado': f"JRV_{acta.get('numero_jrv')}.pdf"
                 })
 
-        # Progreso
+        # Progress
         procesadas = min(i + CONCURRENCIA_ARCHIVOS, len(actas_dept))
         print(f"   [{procesadas}/{len(actas_dept)}] URLs agregadas: {urls_agregadas}, No encontrados: {no_encontrados}")
 
     return urls_agregadas, no_encontrados
 
 # ============================================================================
-# FUNCIÓN PRINCIPAL
+# MAIN FUNCTION
 # ============================================================================
 
 async def main_async(actas, service):
-    """Función principal asíncrona"""
-    # Agrupar actas por departamento
+    """Main async function"""
+    # Group ballots by department
     actas_por_departamento = {}
     for acta in actas:
         dept = acta.get('departamento', 'DESCONOCIDO')
@@ -250,12 +250,12 @@ async def main_async(actas, service):
 
     print(f"\n📊 Actas agrupadas en {len(actas_por_departamento)} departamentos")
 
-    # Estadísticas
+    # Statistics
     total_urls = 0
     total_no_encontrados = 0
-    actas_faltantes = []  # Lista para registrar actas sin URL
+    actas_faltantes = []  # List to record ballots with no URL
 
-    # Procesar departamentos secuencialmente (pero actas en paralelo)
+    # Process departments sequentially (but ballots in parallel)
     for departamento, actas_dept in actas_por_departamento.items():
         urls, no_encontrados = await procesar_departamento(service, departamento, actas_dept, actas_faltantes)
         total_urls += urls
@@ -264,14 +264,14 @@ async def main_async(actas, service):
     return total_urls, total_no_encontrados, actas_faltantes
 
 def main():
-    """Función principal"""
+    """Main function"""
     print("=" * 80)
     print("AGREGAR URLs DE GOOGLE DRIVE - VERSIÓN RÁPIDA")
     print("=" * 80)
     print(f"⚡ Configuración: {CONCURRENCIA_ARCHIVOS} archivos en paralelo")
     print()
 
-    # Cargar JSON
+    # Load JSON
     print(f"📄 Cargando JSON: {JSON_INPUT}")
     try:
         with open(JSON_INPUT, 'r', encoding='utf-8') as f:
@@ -285,7 +285,7 @@ def main():
 
     print(f"✅ {len(actas)} actas cargadas")
 
-    # Cargar JSON de referencia para actualizar votos si está habilitado
+    # Load reference JSON to update votes if enabled
     datos_referencia = {}
     if ACTUALIZAR_VOTOS:
         print(f"\n📄 Cargando JSON de referencia: {JSON_REFERENCIA}")
@@ -293,7 +293,7 @@ def main():
             with open(JSON_REFERENCIA, 'r', encoding='utf-8') as f:
                 actas_referencia = json.load(f)
 
-            # Crear diccionario para búsqueda rápida por numero_jrv
+            # Build dictionary for fast lookup by numero_jrv
             datos_referencia = {
                 acta['numero_jrv']: {
                     'votos_nulos': acta.get('votos_nulos', 0),
@@ -303,7 +303,7 @@ def main():
             }
             print(f"✅ {len(datos_referencia)} actas de referencia cargadas")
 
-            # Actualizar votos_nulos y votos_blanco
+            # Update votos_nulos and votos_blanco
             print(f"\n🔄 Actualizando votos_nulos y votos_blanco...")
             actualizados = 0
             for acta in actas:
@@ -325,7 +325,7 @@ def main():
             print(f"⚠️  Advertencia: Error leyendo {JSON_REFERENCIA}: {e}")
             print(f"   Se continuará sin actualizar votos_nulos y votos_blanco")
 
-    # Autenticar
+    # Authenticate
     print(f"\n🔑 Autenticando con Google Drive...")
     try:
         service = autenticar_google_drive()
@@ -334,15 +334,15 @@ def main():
         print(f"❌ Error: {e}")
         return
 
-    # Procesar de forma asíncrona
+    # Process asynchronously
     tiempo_inicio = time.time()
 
-    # Ejecutar función asíncrona
+    # Run async function
     total_urls, total_no_encontrados, actas_faltantes = asyncio.run(main_async(actas, service))
 
     tiempo_total = time.time() - tiempo_inicio
 
-    # Guardar JSON
+    # Save JSON
     print(f"\n{'='*80}")
     print("💾 GUARDANDO JSON ACTUALIZADO")
     print(f"{'='*80}")
@@ -355,13 +355,13 @@ def main():
         print(f"❌ Error guardando JSON: {e}")
         return
 
-    # Guardar logs de actas faltantes
+    # Save logs of missing ballots
     if actas_faltantes:
         print(f"\n{'='*80}")
         print("📝 GUARDANDO LOGS DE ACTAS FALTANTES")
         print(f"{'='*80}")
 
-        # Guardar como JSON
+        # Save as JSON
         try:
             with open(LOG_FALTANTES, 'w', encoding='utf-8') as f:
                 json.dump(actas_faltantes, f, ensure_ascii=False, indent=2)
@@ -369,7 +369,7 @@ def main():
         except Exception as e:
             print(f"❌ Error guardando log JSON: {e}")
 
-        # Guardar como texto legible
+        # Save as human-readable text
         try:
             with open(LOG_TEXTO, 'w', encoding='utf-8') as f:
                 f.write("="*80 + "\n")
@@ -380,7 +380,7 @@ def main():
                 f.write(f"Total actas procesadas: {len(actas)}\n")
                 f.write(f"Porcentaje faltante: {len(actas_faltantes)/len(actas)*100:.2f}%\n\n")
 
-                # Agrupar por razón
+                # Group by reason
                 razones = {}
                 for acta in actas_faltantes:
                     razon = acta.get('razon', 'desconocido')
@@ -416,7 +416,7 @@ def main():
         except Exception as e:
             print(f"❌ Error guardando log de texto: {e}")
 
-    # Resumen final
+    # Final summary
     print(f"\n{'='*80}")
     print("✅ PROCESO COMPLETADO")
     print(f"{'='*80}")
