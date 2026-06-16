@@ -143,4 +143,4 @@ Honduras held general elections in November 2025. The CNE published results on i
 ---
 
 *Developed by: Carlos Umanzor*  
-*Period: December 2025 – February 2026*
+*Period: December 2025*

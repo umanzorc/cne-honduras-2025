@@ -414,7 +414,7 @@ Step 6  → (optional) generar_exclusiones.py + re-run browser script
 - **Total JRVs**: ~19,000
 - **Departments**: 19
 - **Municipalities**: ~298
-- **Development period**: December 2025 – February 2026
+- **Development period**: December 2025
 - **Final dataset**: 19,167 JRVs (Feb 2026)
 
 ---

@@ -219,4 +219,4 @@ pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-pyt
 - **Departments**: 19
 - **Municipalities**: ~298
 - **Parties captured**: DC, LIBRE, PINU, Liberal, Nacional + Nulls + Blanks
-- **Development period**: December 2025 – February 2026
+- **Development period**: December 2025
